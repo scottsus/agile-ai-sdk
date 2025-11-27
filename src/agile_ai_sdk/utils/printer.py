@@ -1,74 +1,101 @@
 from agile_ai_sdk import Event, EventType
 
+# Color codes
+GRAY = "\033[90m"
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+MAGENTA = "\033[95m"
+CYAN = "\033[96m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
+
+
+def _get_agent_color(agent: str) -> str:
+    """Get color code based on agent role."""
+    agent_lower = agent.lower()
+
+    if "em" in agent_lower or "engineering_manager" in agent_lower:
+        return RED
+    elif "planner" in agent_lower:
+        return BLUE
+    elif "executor" in agent_lower:
+        return GREEN
+    elif "researcher" in agent_lower or "research" in agent_lower:
+        return CYAN
+    elif "reviewer" in agent_lower:
+        return MAGENTA
+    else:
+        return YELLOW
+
+
+def _print_box(content: str, color: str = GRAY) -> None:
+    """Print content in a box."""
+    lines = content.split("\n")
+    max_width = max(len(line) for line in lines) if lines else 0
+
+    print(f"{color}┌{'─' * (max_width + 2)}┐{RESET}")
+    for line in lines:
+        padding = max_width - len(line)
+        print(f"{color}│{RESET} {line}{' ' * padding} {color}│{RESET}")
+    print(f"{color}└{'─' * (max_width + 2)}┘{RESET}")
+    print()
+
 
 def print_event(event: Event) -> None:
     """Print an event in a nice format.
 
     Just here temporarily - will refactor into an actual library later
     """
-
     agent = event.agent.value if hasattr(event.agent, "value") else str(event.agent)
-    event_type = event.type.value if hasattr(event.type, "value") else str(event.type)
+    agent_color = _get_agent_color(agent)
 
-    # Color codes
-    GRAY = "\033[90m"
-    GREEN = "\033[92m"
-    YELLOW = "\033[93m"
-    BLUE = "\033[94m"
-    MAGENTA = "\033[95m"
-    CYAN = "\033[96m"
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-
-    # Format based on event type
     if event.type == EventType.RUN_STARTED:
         task = event.data.get("task", "")
-        print(f"{GREEN}▶ RUN STARTED{RESET}")
-        print(f"{GRAY}  Task: {task}{RESET}\n")
+        _print_box(f"RUN STARTED\nTask: {task}", GREEN)
 
     elif event.type == EventType.RUN_FINISHED:
         status = event.data.get("status", "completed")
-        print(f"\n{GREEN}✓ RUN FINISHED{RESET}")
-        print(f"{GRAY}  Status: {status}{RESET}")
+        _print_box(f"RUN FINISHED\nStatus: {status}", GREEN)
 
     elif event.type == EventType.RUN_ERROR:
         error = event.data.get("error", "unknown")
-        print(f"\n{YELLOW}✗ RUN ERROR{RESET}")
-        print(f"{GRAY}  Error: {error}{RESET}")
+        _print_box(f"RUN ERROR\nError: {error}", YELLOW)
 
     elif event.type == EventType.TEXT_MESSAGE_CONTENT:
         action = event.data.get("action")
+
         if action == "sent":
             to = event.data.get("to", "unknown")
-            content = event.data.get("content", "")
-            print(f"{BLUE}→{RESET} {BOLD}{agent}{RESET} {GRAY}to{RESET} {BOLD}{to}{RESET}")
-            print(f"{GRAY}  {content}{RESET}")
+            to_color = _get_agent_color(to)
+            print(f"{agent_color}{agent}{RESET} → {to_color}{to}{RESET}")
+            print()
 
         elif action == "received":
             from_ = event.data.get("from_", event.data.get("from", "unknown"))
             content = event.data.get("content", "")
-            print(f"{CYAN}←{RESET} {BOLD}{agent}{RESET} {GRAY}from{RESET} {BOLD}{from_}{RESET}")
-            print(f"{GRAY}  {content}{RESET}")
-
-        else:
-            # Generic message (e.g., agent greetings)
-            message = event.data.get("message", "")
-            if message:
-                print(f"{MAGENTA}💬{RESET} {BOLD}{agent}{RESET}: {message}")
+            from_color = _get_agent_color(from_)
+            _print_box(f"{from_} → {agent}\n\n{content}", agent_color)
 
     elif event.type == EventType.STEP_STARTED:
         status = event.data.get("status", "")
         if status and status != "Agent started":
-            print(f"{CYAN}⚙{RESET}  {BOLD}{agent}{RESET}: {GRAY}{status}{RESET}")
+            print(f"{agent_color}{agent}{RESET}: {GRAY}{status}{RESET}")
+            print()
 
     elif event.type == EventType.TOOL_CALL_START:
         tool = event.data.get("tool", "unknown")
-        print(f"{YELLOW}🔧{RESET} {BOLD}{agent}{RESET} {GRAY}calling{RESET} {tool}")
+        print(f"{agent_color}{agent}{RESET} {GRAY}calling{RESET} {tool}")
+        print()
 
     elif event.type == EventType.TOOL_CALL_RESULT:
         result = event.data.get("result", "")
         print(f"{GRAY}  → {result}{RESET}")
+        print()
 
     else:
-        # Fallback for unknown event types
-        print(f"{GRAY}[{agent}] {event_type}: {event.data}{RESET}")
+        print(
+            f"{GRAY}[{agent}] {event.type.value if hasattr(event.type, 'value') else str(event.type)}: {event.data}{RESET}"
+        )
+        print()

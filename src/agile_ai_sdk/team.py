@@ -74,13 +74,16 @@ class AgentTeam:
 
         await self.agents[AgentRole.EM].drop_in_inbox(source=HumanRole.USER, content=task)
 
-        em_task = asyncio.create_task(self.agents[AgentRole.EM].start())
+        agent_tasks = [asyncio.create_task(agent.start()) for agent in self.agents.values()]
 
         async for event in self.event_stream:
             yield event
 
-            if event.type in (EventType.RUN_FINISHED, EventType.RUN_ERROR):
+            if event.type in (EventType.RUN_ERROR, EventType.RUN_FINISHED):
                 break
 
-        await em_task
+        for agent in self.agents.values():
+            agent.stop()
+
+        await asyncio.gather(*agent_tasks)
         self.event_stream.close()

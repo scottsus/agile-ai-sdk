@@ -8,7 +8,9 @@ async def main():
 
     team = AgentTeam()
 
-    async for event in team.execute("Add a /health endpoint to my FastAPI app"):
+    async for event in team.execute(
+        "I'm just testing something. List all the files inside the src/agile_ai_sdk folder?"
+    ):
         print_event(event)
 
         if event.type in (EventType.RUN_FINISHED, EventType.RUN_ERROR):

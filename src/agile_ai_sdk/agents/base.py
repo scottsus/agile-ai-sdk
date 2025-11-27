@@ -1,6 +1,8 @@
 import asyncio
 from abc import ABC, abstractmethod
 
+from pydantic_ai.messages import ModelMessage
+
 from agile_ai_sdk.core.events import EventStream
 from agile_ai_sdk.core.router import MessageRouter
 from agile_ai_sdk.models import AgentRole, AgentStatusData, ErrorData, Event, EventType, HumanRole, Message
@@ -45,7 +47,7 @@ class BaseAgent(ABC):
         self.interrupt_queue: asyncio.Queue[Message] = asyncio.Queue()
 
         # State
-        self.conversation_history: list[dict[str, str]] = []
+        self.conversation_history: list[ModelMessage] = []
         self._running: bool = False
 
     async def start(self) -> None:

@@ -1,6 +1,12 @@
+import asyncio
+
+from pydantic_ai import Agent, RunContext
+
 from agile_ai_sdk.agents.base import BaseAgent
+from agile_ai_sdk.core.deps import AgentDeps
 from agile_ai_sdk.core.events import EventStream
 from agile_ai_sdk.core.router import MessageRouter
+from agile_ai_sdk.llm import default
 from agile_ai_sdk.models import AgentRole, Event, EventType, Message
 
 
@@ -15,31 +21,112 @@ class Developer(BaseAgent):
     def __init__(self, router: MessageRouter, event_stream: EventStream):
         super().__init__(AgentRole.DEV, router, event_stream)
 
-    async def process_messages(self, messages: list[Message]) -> None:
-        """Process incoming messages.
-
-        Phase 1: Stub implementation.
-        """
-        # Greeting
-        await self.event_stream.emit(
-            Event(
-                type=EventType.TEXT_MESSAGE_CONTENT,
-                agent=self.role,
-                data={"message": "👋 Hi, I'm the Developer! Let me write some code."},
-            )
+        self.ai_agent = Agent(
+            default.get_model(),
+            deps_type=AgentDeps,
+            system_prompt=(
+                "You are a Senior Software Developer implementing code changes.\n\n"
+                "Workflow:\n"
+                "1. Use run_bash tool to execute commands and gather information\n"
+                "2. Use respond_back tool to send results back to the EM\n"
+                "3. Always end your response with a brief text summary of what you accomplished\n\n"
+                "IMPORTANT: You MUST provide a final text output describing what you did, even if brief.\n"
+                "Example outputs:\n"
+                "- 'Executed ls command and sent results to EM'\n"
+                "- 'Created new file and reported completion'\n"
+                "- 'Ran tests and shared output'\n\n"
+                "Available tools:\n"
+                "- run_bash: Execute shell commands (ls, cat, git, etc.)\n"
+                "- respond_back: Send results back to the EM"
+            ),
         )
 
-        # TODO Phase 2: Implement development logic
-        # - Code implementation
-        # - Test writing
-        # - Git operations
+        @self.ai_agent.tool
+        async def run_bash(ctx: RunContext[AgentDeps], command: str) -> str:
+            """Execute a bash command.
 
+            Args:
+                command: The bash command to execute
+
+            Example:
+                >>> run_bash("ls -la")
+                >>> run_bash("git status")
+                >>> run_bash("cat src/main.py")
+            """
+            await ctx.deps.event_stream.emit(
+                Event(
+                    type=EventType.STEP_STARTED,
+                    agent=self.role,
+                    data={"status": f"Executing: {command}"},
+                )
+            )
+
+            try:
+                process = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=30.0,
+                )
+
+                output = []
+                if stdout:
+                    output.append(f"STDOUT:\n{stdout.decode()}")
+                if stderr:
+                    output.append(f"STDERR:\n{stderr.decode()}")
+
+                exit_code = process.returncode
+                output.append(f"Exit code: {exit_code}")
+
+                return "\n".join(output)
+
+            except asyncio.TimeoutError:
+                return "Error: Command timed out after 30 seconds"
+            except Exception as e:
+                return f"Error executing command: {str(e)}"
+
+        @self.ai_agent.tool
+        async def respond_back(ctx: RunContext[AgentDeps], message: str) -> str:
+            """Send a response back to the Engineering Manager.
+
+            Args:
+                message: The response message describing what was done
+            """
+            await ctx.deps.router.send(self.role, AgentRole.EM, message)
+            return "Response sent to EM."
+
+    async def process_messages(self, messages: list[Message]) -> None:
+        """Process incoming messages using Pydantic AI agent.
+
+        Example:
+            >>> messages = [Message(source=AgentRole.EM, target=AgentRole.DEV, content="Implement /health")]
+            >>> await dev.process_messages(messages)
+        """
         await self.event_stream.emit(
             Event(
                 type=EventType.STEP_STARTED,
                 agent=self.role,
-                data={"status": "Implementing code (stubbed)", "message_count": len(messages)},
+                data={"status": "Processing messages", "message_count": len(messages)},
             )
         )
+
+        task = "\n".join([f"[{msg.source.value}]: {msg.content}" for msg in messages])
+
+        deps = AgentDeps(router=self.router, event_stream=self.event_stream)
+        result = await self.ai_agent.run(task, message_history=self.conversation_history, deps=deps)
+        self.conversation_history.extend(result.new_messages())
+
+        if result.output:
+            await self.event_stream.emit(
+                Event(
+                    type=EventType.TEXT_MESSAGE_CONTENT,
+                    agent=self.role,
+                    data={"message": result.output},
+                )
+            )
 
         self.stop()

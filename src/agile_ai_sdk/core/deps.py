@@ -1,12 +1,17 @@
 from dataclasses import dataclass
 
+from agile_ai_sdk.core.events import EventStream
+from agile_ai_sdk.core.router import MessageRouter
+
 
 @dataclass
 class AgentDeps:
     """Dependencies shared across all agents.
 
-    This is a shell wrapper that will be populated with shared resources
-    like EventStream, MessageRouter, workspace, etc.
+    Attributes:
+        router: Message router for inter-agent communication
+        event_stream: Event stream for observability
     """
 
-    pass
+    router: MessageRouter
+    event_stream: EventStream
