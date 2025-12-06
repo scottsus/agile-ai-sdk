@@ -193,6 +193,8 @@ class CodeActAgent(BaseAgent):
                         data={"error": str(e), "error_type": type(e).__name__},
                     )
                 )
-
-            finally:
+                # TODO: Send error notification to EM for coordinated error handling
+                # instead of just stopping. EM should decide whether to retry,
+                # reassign the task, or terminate the session.
+                # For now, stop on error - errors are fatal for the session
                 self.stop()

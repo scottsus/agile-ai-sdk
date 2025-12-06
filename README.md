@@ -36,32 +36,128 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 ## Quick Start
 
-### SDK Version
+### FastAPI Integration (Recommended)
+
+Build a web backend where users can send messages and stream real-time agent events:
 
 ```python
-from agile_ai import AgentTeam
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 import asyncio
+from agile_ai_sdk import AgentTeam
 
-async def main():
-    team = AgentTeam()
+app = FastAPI()
+team = AgentTeam()
+subscribers: list[asyncio.Queue] = []
 
-    async for event in team.execute("Add a /health endpoint to my FastAPI app"):
-        print(f"[{event.agent}] {event.type}: {event.data}")
+# Broadcast all events to SSE subscribers
+@team.on_any_event
+async def broadcast(event):
+    for queue in subscribers:
+        try:
+            await asyncio.wait_for(queue.put(event), timeout=1.0)
+        except asyncio.TimeoutError:
+            subscribers.remove(queue)
 
-        if event.type == "task.completed":
-            print(f"✅ Done! PR: {event.data['pr_url']}")
-            break
+await team.start()  # Call this on app startup
 
-asyncio.run(main())
+
+@app.post("/message")
+async def post_message(message: str):
+    """Send a message to the agent team (non-blocking)"""
+    await team.drop_message(message)
+    return {"status": "queued"}
+
+
+@app.get("/stream")
+async def stream_events():
+    """Server-Sent Events stream of all agent events"""
+    queue = asyncio.Queue(maxsize=100)
+    subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                event = await queue.get()
+                yield f"data: {event.model_dump_json()}\n\n"
+        finally:
+            subscribers.remove(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream"
+    )
 ```
 
-### TUI version
+**Frontend (React):**
+
+```tsx
+import { useState, useEffect } from "react";
+
+function useAgentStream() {
+  const [events, setEvents] = useState([]);
+
+  useEffect(() => {
+    const eventSource = new EventSource("/stream");
+
+    eventSource.onmessage = (e) => {
+      const event = JSON.parse(e.data);
+      setEvents((prev) => [...prev, event]);
+    };
+
+    return () => eventSource.close();
+  }, []);
+
+  const sendMessage = async (message: string) => {
+    await fetch("/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+  };
+
+  return { events, sendMessage };
+}
+
+function AgentChat() {
+  const { events, sendMessage } = useAgentStream();
+  const [input, setInput] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sendMessage(input);
+    setInput("");
+  };
+
+  return (
+    <div>
+      <div className="events">
+        {events.map((event, i) => (
+          <div key={i}>
+            [{event.agent}] {event.type}
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Send a message to the agent team..."
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+```
+
+### TUI Version
 
 ```bash
-# run like claude code
+# Run like claude code
 agile-ai
 
-# or use the shorthand
+# Or use the shorthand
 agi
 ```
 

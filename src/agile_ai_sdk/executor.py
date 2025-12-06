@@ -1,40 +1,64 @@
-from collections.abc import AsyncIterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from agile_ai_sdk.models import Event
+from agile_ai_sdk.models import Event, EventHandler, EventType
 
 
 class TaskExecutor(Protocol):
     """Protocol for task execution systems (AgentTeam, SoloAgentHarness, etc.).
 
-    All executors must implement the execute() method which takes a task
-    description and optional workspace directory, returning an async stream
-    of events.
+    All executors must implement a message-based API with event handlers:
+    - start(): Initialize agents and begin processing
+    - drop_message(): Send messages to the system
+    - on(): Register handlers for specific event types
+    - on_any_event(): Register handlers for all events
+    - stop(): Clean shutdown
 
-    Example:
-        >>> executor: TaskExecutor = AgentTeam()
-        >>> async for event in executor.execute("Add /health endpoint"):
-        ...     print(event.type)
-
-        >>> executor: TaskExecutor = SoloAgentHarness()
-        >>> async for event in executor.execute("List files"):
-        ...     print(event.type)
+    Example using event handlers:
+        >>> team = AgentTeam()
+        >>>
+        >>> @team.on(EventType.RUN_FINISHED)
+        >>> async def on_complete(event):
+        ...     print("Task completed!")
+        ...     await team.stop()
+        >>>
+        >>> @team.on_any_event
+        >>> async def log_all(event):
+        ...     print(f"[{event.agent}] {event.type}")
+        >>>
+        >>> await team.start()
+        >>> await team.drop_message("Add /health endpoint")
     """
 
-    def execute(self, task: str, workspace_dir: Path | None = None) -> AsyncIterator[Event]:
-        """Execute a task and stream events.
+    async def start(self, workspace_dir: Path | None = None) -> None:
+        """Start the executor and spawn agent run loops."""
+        ...
 
-        Args:
-            task: Task description (e.g., "Add /health endpoint")
-            workspace_dir: Working directory for execution (defaults to cwd)
+    async def drop_message(self, content: str) -> None:
+        """Send a message to the executor."""
+        ...
 
-        Yields:
-            Event objects representing execution progress
+    def on(self, event_type: EventType) -> Callable[[EventHandler], EventHandler]:
+        """Decorator to register handler for specific event type.
 
         Example:
-            >>> async for event in executor.execute("Run tests"):
-            ...     if event.type == EventType.RUN_FINISHED:
-            ...         print("Task completed!")
+            >>> @executor.on(EventType.RUN_FINISHED)
+            >>> async def on_complete(event):
+            ...     print("Done!")
         """
+        ...
+
+    def on_any_event(self, handler: EventHandler) -> EventHandler:
+        """Decorator to register handler for all events.
+
+        Example:
+            >>> @executor.on_any_event
+            >>> async def log_all(event):
+            ...     print(f"{event.type}: {event.data}")
+        """
+        ...
+
+    async def stop(self) -> None:
+        """Stop the executor and clean up resources."""
         ...

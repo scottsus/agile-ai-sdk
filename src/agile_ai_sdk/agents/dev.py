@@ -129,5 +129,3 @@ class Developer(BaseAgent):
                     data={"message": result.output},
                 )
             )
-
-        self.stop()

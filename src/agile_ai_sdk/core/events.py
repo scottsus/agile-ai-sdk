@@ -68,9 +68,6 @@ class EventStream:
                 event = await asyncio.wait_for(self._queue.get(), timeout=0.1)
                 yield event
 
-                if event.type == EventType.RUN_FINISHED:
-                    break
-
             except asyncio.TimeoutError:
                 if self._closed and self._queue.empty():
                     break

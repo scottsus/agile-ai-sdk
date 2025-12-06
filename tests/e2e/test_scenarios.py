@@ -30,7 +30,11 @@ async def test_add_health_endpoint(
         "Make sure all tests pass by running pytest."
     )
 
-    await event_collector.collect_until_done(executor.execute(task, workspace_dir=workspace_dir))
+    executor.on_any_event(event_collector.collect)
+
+    await executor.start(workspace_dir=workspace_dir)
+    await executor.drop_message(task)
+    await event_collector.wait_for_completion()
     event_collector.assert_completed_successfully()
 
     assert_file_exists(workspace_dir / "fastapi_app", "main.py")
@@ -55,6 +59,8 @@ async def test_add_health_endpoint(
 
     assert_no_errors(event_collector.events)
 
+    await executor.stop()
+
 
 @pytest.mark.scenario
 @pytest.mark.e2e
@@ -76,8 +82,11 @@ async def test_fix_broken_code(
         "After fixing, run the tests again to make sure all tests pass."
     )
 
-    await event_collector.collect_until_done(executor.execute(task, workspace_dir=workspace_dir))
+    executor.on_any_event(event_collector.collect)
 
+    await executor.start(workspace_dir=workspace_dir)
+    await executor.drop_message(task)
+    await event_collector.wait_for_completion()
     event_collector.assert_completed_successfully()
 
     assert_file_exists(workspace_dir / "broken_code", "buggy.py")
@@ -102,6 +111,8 @@ async def test_fix_broken_code(
 
     assert_no_errors(event_collector.events)
 
+    await executor.stop()
+
 
 @pytest.mark.scenario
 @pytest.mark.e2e
@@ -123,8 +134,11 @@ async def test_add_feature_with_tests(
         "Run pytest to make sure all tests pass."
     )
 
-    await event_collector.collect_until_done(executor.execute(task, workspace_dir=workspace_dir))
+    executor.on_any_event(event_collector.collect)
 
+    await executor.start(workspace_dir=workspace_dir)
+    await executor.drop_message(task)
+    await event_collector.wait_for_completion()
     event_collector.assert_completed_successfully()
 
     assert_file_exists(workspace_dir / "simple_python", "calculator.py")
@@ -148,3 +162,5 @@ async def test_add_feature_with_tests(
     assert_tests_pass(workspace_dir / "simple_python", "pytest -v")
 
     assert_no_errors(event_collector.events)
+
+    await executor.stop()

@@ -83,7 +83,7 @@ class EngineeringManager(BaseAgent):
 
         @self.ai_agent.tool
         async def complete_task(ctx: RunContext[AgentDeps], summary: str) -> str:
-            """Mark the entire task as complete and stop all agents.
+            """Mark the current task as complete.
 
             Only call this when:
             - You have delegated to all necessary agents
@@ -102,9 +102,7 @@ class EngineeringManager(BaseAgent):
                 )
             )
 
-            self.stop()
-
-            return "Task marked as complete. All agents will stop."
+            return "Task marked as complete. Ready for next message."
 
     async def process_messages(self, messages: list[Message]) -> None:
         """Process incoming messages using Pydantic AI agent.
@@ -146,4 +144,7 @@ class EngineeringManager(BaseAgent):
                     data={"error": str(e)},
                 )
             )
+            # TODO: Implement error recovery logic here
+            # Options: retry task, reassign to different agent, request human help
+            # For now, stop on error - errors are fatal for the session
             self.stop()

@@ -124,6 +124,9 @@ class BaseAgent(ABC):
                             data=ErrorData(error=str(e)).model_dump(),
                         )
                     )
+                    # TODO: Send error notification to EM for coordinated error handling
+                    # instead of just breaking. EM should decide whether to retry,
+                    # escalate, or terminate the session.
                     break
 
         except asyncio.CancelledError:

@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from agile_ai_sdk.models import Event, EventType
@@ -9,18 +8,20 @@ if TYPE_CHECKING:
 
 
 class EventCollector:
-    """Helper to collect and analyze events from stream.
+    """Helper to collect and analyze events using handlers.
 
     This class:
-    1. collects events from an async stream until completion
+    1. collects events via handler registration
     2. provides assertion helpers for event validation
     3. extracts metadata like run_id and final results
     4. optionally logs events to a test run logger
+    5. waits for completion with configurable timeout
 
     Example:
         >>> collector = EventCollector(test_run_logger=logger)
-        >>> await collector.collect_until_done(team.execute("task"))
-        >>> # Events automatically logged to ~/.agile-ai/test-runs/
+        >>> executor.on_any_event(collector.collect)
+        >>> await collector.wait_for_completion()
+        >>> collector.assert_completed_successfully()
     """
 
     def __init__(self, test_run_logger: "TestRunLogger | None" = None) -> None:
@@ -34,34 +35,29 @@ class EventCollector:
         self.completed: bool = False
         self.error: str | None = None
         self.test_run_logger: TestRunLogger | None = test_run_logger
+        self._completion_event: asyncio.Event = asyncio.Event()
 
-    async def collect_until_done(
-        self, stream: AsyncIterator[Event], max_events: int = 1000, timeout: float = 300
-    ) -> None:
-        """Collect events until RUN_FINISHED or RUN_ERROR."""
+    async def collect(self, event: Event) -> None:
+        """Handler to collect events."""
 
-        async def _collect():
-            count = 0
-            async for event in stream:
-                self.events.append(event)
-                count += 1
+        self.events.append(event)
 
-                if self.test_run_logger:
-                    self.test_run_logger.log_event(event)
+        if self.test_run_logger:
+            self.test_run_logger.log_event(event)
 
-                if event.type == EventType.RUN_FINISHED:
-                    self.completed = True
-                    break
+        if event.type == EventType.RUN_FINISHED:
+            self.completed = True
+            self._completion_event.set()
 
-                elif event.type == EventType.RUN_ERROR:
-                    self.completed = True
-                    self.error = event.data.get("error", "Unknown error")
-                    break
+        elif event.type == EventType.RUN_ERROR:
+            self.completed = True
+            self.error = event.data.get("error", "Unknown error")
+            self._completion_event.set()
 
-                if count >= max_events:
-                    raise RuntimeError(f"Collected {max_events} events without completion")
+    async def wait_for_completion(self, timeout: float = 300) -> None:
+        """Wait for RUN_FINISHED or RUN_ERROR event."""
 
-        await asyncio.wait_for(_collect(), timeout=timeout)
+        await asyncio.wait_for(self._completion_event.wait(), timeout=timeout)
 
     def get_by_type(self, event_type: EventType) -> list[Event]:
         """Get all events of specific type."""

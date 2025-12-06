@@ -41,5 +41,3 @@ class SeniorReviewer(BaseAgent):
                 data={"status": "Reviewing code (stubbed)", "message_count": len(messages)},
             )
         )
-
-        self.stop()

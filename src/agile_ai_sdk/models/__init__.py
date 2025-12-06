@@ -7,6 +7,7 @@ from agile_ai_sdk.models.event_data import (
     MessageReceivedData,
     MessageSentData,
 )
+from agile_ai_sdk.models.handler import EventHandler
 from agile_ai_sdk.models.message import Message
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "BaseModel",
     "ErrorData",
     "Event",
+    "EventHandler",
     "EventType",
     "HumanRole",
     "Message",

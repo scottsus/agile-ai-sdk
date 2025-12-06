@@ -8,13 +8,30 @@ async def main():
 
     team = AgentTeam()
 
-    async for event in team.execute(
-        "I'm just testing something. List all the files inside the src/agile_ai_sdk folder?"
-    ):
+    @team.on_any_event
+    async def log_all_events(event):
+        """Log all events to console."""
         print_event(event)
 
-        if event.type in (EventType.RUN_FINISHED, EventType.RUN_ERROR):
-            break
+    @team.on(EventType.RUN_FINISHED)
+    async def on_complete(event):
+        """Handle completion."""
+        print("\n✅ Task completed successfully!")
+        await team.stop()
+
+    @team.on(EventType.RUN_ERROR)
+    async def on_error(event):
+        """Handle errors."""
+        print(f"\n❌ Error: {event.data.get('error', 'Unknown error')}")
+        await team.stop()
+
+    await team.start()
+    await team.drop_message("I'm just testing something. List all the files inside the src/agile_ai_sdk folder?")
+
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        await team.stop()
 
 
 if __name__ == "__main__":
